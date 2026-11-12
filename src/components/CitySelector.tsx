@@ -1,16 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CITIES } from "@/data/cities";
 
 interface CitySelectorProps {
   value: string;
   onChange: (city: string) => void;
 }
-
-const CITIES = [
-  "Delhi", "Mumbai", "Beijing", "London", "New York", 
-  "Los Angeles", "Paris", "Tokyo", "Shanghai", "Bangkok"
-];
 
 export const CitySelector = ({ value, onChange }: CitySelectorProps) => {
   return (
@@ -24,8 +20,8 @@ export const CitySelector = ({ value, onChange }: CitySelectorProps) => {
         </SelectTrigger>
         <SelectContent>
           {CITIES.map(city => (
-            <SelectItem key={city} value={city}>
-              {city}
+            <SelectItem key={city.id} value={city.id}>
+              {city.name}
             </SelectItem>
           ))}
         </SelectContent>

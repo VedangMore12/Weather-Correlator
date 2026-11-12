@@ -44,7 +44,7 @@ export const StatsCard = ({ title, value, actualValue, unit, icon }: StatsCardPr
       {/* Actual current value */}
       {actualValue !== undefined && (
         <div className="mt-2 text-sm text-foreground">
-          Current: <span className="font-semibold">{actualValue.toFixed(1)} {unit}</span>
+          Latest matched: <span className="font-semibold">{actualValue.toFixed(1)} {unit}</span>
         </div>
       )}
     </Card>

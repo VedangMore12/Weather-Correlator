@@ -27,8 +27,8 @@ export const AnomalyAlert = ({ data }: AnomalyAlertProps) => {
       <AlertTriangle className="h-4 w-4" />
       <AlertTitle>Anomalies Detected</AlertTitle>
       <AlertDescription>
-        Found {anomalies.length} unusual PM2.5 spike(s) that deviate significantly from the mean.
-        These points are highlighted in red on the charts.
+        Found {anomalies.length} unusually high or low PM2.5 observation(s), more than two standard
+        deviations from the selected range's mean.
       </AlertDescription>
     </Alert>
   );

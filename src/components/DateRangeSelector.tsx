@@ -8,13 +8,29 @@ interface DateRangeSelectorProps {
   onChange: (range: { start: Date; end: Date }) => void;
 }
 
+const toLocalDateInput = (date: Date) => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+
+const parseLocalDate = (value: string, endOfDay = false) => {
+  const date = new Date(`${value}T00:00:00`);
+  if (endOfDay) date.setHours(23, 59, 59, 999);
+  return date;
+};
+
+const earliestSelectableDate = (end: Date) => {
+  const earliest = new Date(end);
+  earliest.setDate(earliest.getDate() - 90);
+  return earliest;
+};
+
 export const DateRangeSelector = ({ value, onChange }: DateRangeSelectorProps) => {
   const presets = [
     { label: "Current (Today)", type: "current" },
     { label: "Last 7 Days", type: "7d", days: 7 },
     { label: "Last 30 Days", type: "30d", days: 30 },
     { label: "Last 90 Days", type: "90d", days: 90 },
-    { label: "Last 1 Year", type: "365d", days: 365 },
   ];
 
   const handlePresetClick = (preset: { type: string; days?: number }) => {
@@ -59,9 +75,11 @@ export const DateRangeSelector = ({ value, onChange }: DateRangeSelectorProps) =
         <label className="block text-sm font-medium">Start Date</label>
         <input
           type="date"
-          value={value.start.toISOString().split("T")[0]}
+          min={toLocalDateInput(earliestSelectableDate(value.end))}
+          max={toLocalDateInput(value.end)}
+          value={toLocalDateInput(value.start)}
           onChange={(e) =>
-            onChange({ ...value, start: new Date(e.target.value) })
+            onChange({ ...value, start: parseLocalDate(e.target.value) })
           }
           className="w-full border rounded-md p-2 text-sm"
         />
@@ -69,9 +87,11 @@ export const DateRangeSelector = ({ value, onChange }: DateRangeSelectorProps) =
         <label className="block text-sm font-medium">End Date</label>
         <input
           type="date"
-          value={value.end.toISOString().split("T")[0]}
+          max={toLocalDateInput(new Date())}
+          min={toLocalDateInput(value.start)}
+          value={toLocalDateInput(value.end)}
           onChange={(e) =>
-            onChange({ ...value, end: new Date(e.target.value) })
+            onChange({ ...value, end: parseLocalDate(e.target.value, true) })
           }
           className="w-full border rounded-md p-2 text-sm"
         />

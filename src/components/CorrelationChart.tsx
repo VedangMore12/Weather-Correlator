@@ -36,13 +36,12 @@ export const CorrelationChart = ({
   pollutionData,
   parameter,
 }: CorrelationChartProps) => {
-  if (!weatherData.length || !pollutionData.length) return null;
-
-  // Merge datasets by index
-  const mergedData = weatherData.map((w, i) => ({
-    x: w[parameter],
-    y: pollutionData[i]?.pm25 || 0,
-  }));
+  const pollutionByTimestamp = new Map(pollutionData.map((item) => [item.timestamp, item.pm25]));
+  const mergedData = weatherData.flatMap((weather) => {
+    const pm25 = pollutionByTimestamp.get(weather.timestamp);
+    return pm25 === undefined ? [] : [{ x: weather[parameter], y: pm25 }];
+  });
+  if (!mergedData.length) return null;
 
   // Readable labels for axes and legend
   const parameterLabels: Record<string, string> = {
@@ -65,14 +64,10 @@ export const CorrelationChart = ({
     { x: maxX, y: slope * maxX + intercept },
   ];
 
-  // Predicted PM2.5 at latest weather value
-  const latestX = xValues[xValues.length - 1];
-  const predictedY = slope * latestX + intercept;
-
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4">
-        {parameterLabels[parameter]} vs PM2.5 Correlation
+        {parameterLabels[parameter]} vs PM2.5 (matched observations)
       </h3>
 
       {/* Chart */}
@@ -87,7 +82,7 @@ export const CorrelationChart = ({
     {/* Actual data points */}
     <Scatter name="Actual Data" data={mergedData} fill="#3b82f6" />
 
-    {/* Regression (Prediction) line */}
+    {/* In-sample regression line; it is not a future forecast. */}
     <Line
       type="monotone"
       data={regressionLine}
@@ -101,12 +96,9 @@ export const CorrelationChart = ({
 </ResponsiveContainer>
 
 
-      {/* Predicted Value Display */}
       <p className="text-sm text-muted-foreground mt-3">
-        Predicted PM2.5 at current {parameterLabels[parameter].toLowerCase()}:{" "}
-        <span className="font-semibold text-primary">
-          {predictedY.toFixed(2)} μg/m³
-        </span>
+        The fitted line summarizes these historical observations; it is not a future PM2.5
+        forecast.
       </p>
     </Card>
   );

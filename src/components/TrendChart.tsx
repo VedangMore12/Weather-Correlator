@@ -12,67 +12,68 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card } from "@/components/ui/card";
-import { correlationLabel } from "@/utils/correlation";
+import { calculateCorrelation, correlationLabel } from "@/utils/correlation";
 
 interface TrendChartProps {
-  weatherData: any[];
-  pollutionData: any[];
+  weatherData: Array<{
+    timestamp: string;
+    temperature: number;
+    humidity: number;
+    windSpeed: number;
+    pressure: number;
+  }>;
+  pollutionData: Array<{ timestamp: string; pm25: number }>;
   parameter: "temperature" | "humidity" | "pressure" | "windSpeed";
+  timezone: string;
 }
 
-export const TrendChart = ({ weatherData, pollutionData, parameter }: TrendChartProps) => {
-  if (!weatherData.length || !pollutionData.length) return null;
+interface TrendPoint {
+  timestamp: string;
+  date: string;
+  temperature: number;
+  humidity: number;
+  windSpeed: number;
+  pressure: number;
+  pm25: number;
+}
 
-  // Merge data
-  const data = weatherData.map((w, i) => ({
-    date: new Date(w.timestamp || w.date).toLocaleDateString(),
-    temperature: w.temperature,
-    humidity: w.humidity,
-    windSpeed: w.windSpeed,
-    pressure: w.pressure,
-    pm25: pollutionData[i]?.pm25 || 0,
-  }));
-
-  const attrValues = data.map((d) => d[parameter]);
-  const pmValues = data.map((d) => d.pm25);
-
-  // Parallel correlation calculation using Web Worker (inline)
+export const TrendChart = ({ weatherData, pollutionData, parameter, timezone }: TrendChartProps) => {
+  const data = useMemo(() => {
+    const pollutionByTimestamp = new Map(
+      pollutionData.map((item) => [item.timestamp, item.pm25])
+    );
+    return weatherData.flatMap((weather) => {
+      const pm25 = pollutionByTimestamp.get(weather.timestamp);
+      if (pm25 === undefined) return [];
+      return [{
+        timestamp: weather.timestamp,
+        date: new Date(weather.timestamp).toLocaleString(undefined, { timeZone: timezone }),
+        temperature: weather.temperature,
+        humidity: weather.humidity,
+        windSpeed: weather.windSpeed,
+        pressure: weather.pressure,
+        pm25,
+      }];
+    });
+  }, [weatherData, pollutionData, timezone]);
+  const attrValues = useMemo(() => data.map((row) => row[parameter]), [data, parameter]);
+  const pmValues = useMemo(() => data.map((row) => row.pm25), [data]);
   const [correlation, setCorrelation] = useState<number>(0);
 
   useEffect(() => {
-    if (!attrValues.length || !pmValues.length) return;
-
-    // Create a small inline worker script as a Blob
-    const workerCode = `
-      self.onmessage = function(e) {
-        const { arr1, arr2 } = e.data;
-        const n = arr1.length;
-        const mean1 = arr1.reduce((a,b) => a+b,0) / n;
-        const mean2 = arr2.reduce((a,b) => a+b,0) / n;
-        let num = 0, den1 = 0, den2 = 0;
-        for (let i = 0; i < n; i++) {
-          const d1 = arr1[i] - mean1;
-          const d2 = arr2[i] - mean2;
-          num += d1 * d2;
-          den1 += d1 * d1;
-          den2 += d2 * d2;
-        }
-        const corr = num / Math.sqrt(den1 * den2);
-        postMessage(corr);
+    let active = true;
+    if (!attrValues.length) {
+      setCorrelation(0);
+      return () => {
+        active = false;
       };
-    `;
-
-    const blob = new Blob([workerCode], { type: "application/javascript" });
-    const worker = new Worker(URL.createObjectURL(blob));
-
-    worker.onmessage = (e) => {
-      setCorrelation(e.data);
-      worker.terminate();
+    }
+    calculateCorrelation(attrValues, pmValues).then((value) => {
+      if (active) setCorrelation(value);
+    });
+    return () => {
+      active = false;
     };
-
-    worker.postMessage({ arr1: attrValues, arr2: pmValues });
-
-    return () => worker.terminate();
   }, [attrValues, pmValues]);
 
   const correlationText = useMemo(() => correlationLabel(correlation), [correlation]);
@@ -80,31 +81,34 @@ export const TrendChart = ({ weatherData, pollutionData, parameter }: TrendChart
   const interpretation = useMemo(() => {
     const attr = parameter.toLowerCase();
     if (correlation > 0.5)
-      return `${correlationText}: Higher ${attr} tends to increase PM2.5 levels — positive influence.`;
+      return `${correlationText}: Higher ${attr} is associated with higher PM2.5 in this dataset. This does not establish causation.`;
     else if (correlation < -0.5)
-      return `${correlationText}: Higher ${attr} is linked with reduced PM2.5 — dispersal or cleaning effect.`;
+      return `${correlationText}: Higher ${attr} is associated with lower PM2.5 in this dataset. This does not establish causation.`;
     else
-      return `${correlationText}: Weak correlation — ${attr} doesn’t strongly affect PM2.5 levels.`;
+      return `${correlationText}: ${attr} has little linear association with PM2.5 in this dataset.`;
   }, [parameter, correlation, correlationText]);
 
   // Seasonal averages
   const seasonalComparison = useMemo(() => {
     const seasons = {
-      Winter: data.filter((d) => ["12", "1", "2"].includes(new Date(d.date).getMonth().toString())),
-      Summer: data.filter((d) => ["4", "5", "6"].includes(new Date(d.date).getMonth().toString())),
-      Monsoon: data.filter((d) => ["7", "8", "9"].includes(new Date(d.date).getMonth().toString())),
-      PostMonsoon: data.filter((d) => ["10", "11"].includes(new Date(d.date).getMonth().toString())),
+      Winter: data.filter((d) => [12, 1, 2].includes(Number(new Date(d.timestamp).toLocaleString("en-US", { timeZone: timezone, month: "numeric" })))),
+      Summer: data.filter((d) => [4, 5, 6].includes(Number(new Date(d.timestamp).toLocaleString("en-US", { timeZone: timezone, month: "numeric" })))),
+      Monsoon: data.filter((d) => [7, 8, 9].includes(Number(new Date(d.timestamp).toLocaleString("en-US", { timeZone: timezone, month: "numeric" })))),
+      PostMonsoon: data.filter((d) => [10, 11].includes(Number(new Date(d.timestamp).toLocaleString("en-US", { timeZone: timezone, month: "numeric" })))),
     };
 
-    const avg = (arr: any[], key: string) =>
-      arr.length ? arr.reduce((sum, x) => sum + (x[key] || 0), 0) / arr.length : 0;
+    const avg = (arr: TrendPoint[], key: keyof TrendPoint) =>
+      arr.length
+        ? arr.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : 0), 0) /
+          arr.length
+        : 0;
 
     return Object.entries(seasons).map(([season, records]) => ({
       season,
       avgAttr: avg(records, parameter).toFixed(2),
       avgPM: avg(records, "pm25").toFixed(2),
     }));
-  }, [data, parameter]);
+  }, [data, parameter, timezone]);
 
   const parameterLabels: Record<string, string> = {
     temperature: "Temperature (°C)",
@@ -112,6 +116,8 @@ export const TrendChart = ({ weatherData, pollutionData, parameter }: TrendChart
     pressure: "Pressure (hPa)",
     windSpeed: "Wind Speed (m/s)",
   };
+
+  if (!data.length) return null;
 
   return (
     <Card className="p-6">
